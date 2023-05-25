@@ -1,0 +1,180 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Tmplate that provisions a VPC along with its essential components and an EC2 instance within the VPC
+
+Parameters:
+  CloudForceChallengeVpcCIDR:
+    Default: 10.0.0.0/16
+    Description: Kindly enter the CIDR notation for the VPC
+    Type: String
+
+  ChallengePublicSubnetCIDR:
+    Default: 10.0.0.0/24
+    Description: Kindly enter the CIDR notation for the public Subnet
+    Type: String 
+
+  ChallengePrivateSubnetCIDR:
+    Default: 10.0.1.0/24
+    Description: Kindly enter the CIDR notation for the private Subnet
+    Type: String 
+  
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          Default: "Challenge VPC CIDR"
+        Parameters:
+          - CloudForceChallengeVpcCIDR
+      - 
+        Label:
+          Default: "Challenge Subnet CIDR"
+        Parameters:
+          - ChallengePublicSubnetCIDR
+          - ChallengePrivateSubnetCIDR
+
+Resources:
+#Create a VPC 
+  CloudForceChallengeVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref CloudForceChallengeVpcCIDR
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: Challenge VPC
+
+#Create an Interent Gateway
+  ChallengeIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties: 
+      Tags:
+        - Key: Name
+          Value: Challenge IGW
+
+#Attach IGW to VPC
+  ChallengeIgwAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref ChallengeIGW
+      VpcId: !Ref CloudForceChallengeVPC
+
+#Create a public subnet
+  ChallengePublicSubnet: 
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref ChallengePublicSubnetCIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Challenge Public Subnet
+      VpcId: !Ref CloudForceChallengeVPC
+
+#Create public Route Table
+  ChallengePublicRT:
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref CloudForceChallengeVPC
+      Tags:
+        - Key: Name
+          Value: Challenge Public RT
+      
+#Add a public route to public route table
+  ChallengePublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref ChallengePublicRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref ChallengeIGW
+
+# Associate public subnet with public route tablet
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref ChallengePublicSubnet
+      RouteTableId: !Ref ChallengePublicRT
+
+#Create a private subnet
+  ChallengePrivateSubnet: 
+    Type: AWS::EC2::Subnet
+    Properties: 
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Ref ChallengePrivateSubnetCIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: Challenge Private Subnet
+      VpcId: !Ref CloudForceChallengeVPC 
+
+#Create a EC2 Security Group
+  ChallengeEC2SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Allow HTTP/HTTPS to the EC2 instance
+      SecurityGroupIngress:
+        IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: '0.0.0.0/0'
+      Tags:
+        - Key: Name
+          Value: Challenge EC2 Instance SG
+      VpcId: !Ref CloudForceChallengeVPC
+
+#Create a Key Pair
+  ChallengeKeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: ChallengeKeyPair
+#Create an EC2 Instance
+  ChallengeEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: !Ref ChallengeKeyPair
+      DisableApiTermination: false
+      ImageId: ami-0889a44b331db0194 
+      InstanceType: t2.micro  
+      SecurityGroupIds:
+        - !Ref ChallengeEC2SecurityGroup
+      SubnetId: !Ref ChallengePublicSubnet
+      Tags:
+        - Key: Name
+          Value: ChallengeEC2
+Outputs:
+#Export challenge VPC
+  CloudForceChallengeVPC:
+    Description: Cloud Force Challenge VPC
+    Export:
+      Name: !Sub ${AWS::StackName}-CloudForceChallengeVPC
+    Value: !Ref CloudForceChallengeVPC
+
+#Export challenge public subnet
+  ChallengePublicSubnet:
+    Description: Challenge Public Subnet
+    Export:
+      Name: !Sub ${AWS::StackName}-ChallengePublicSubnet
+    Value: !Ref ChallengePublicSubnet
+
+#Export challenge private subnet
+  ChallengePrivateSubnet:
+    Description: Challenge Private Subnet
+    Export:
+      Name: !Sub ${AWS::StackName}-ChallengePrivateSubnet
+    Value: !Ref ChallengePrivateSubnet
+
+#Export challenge EC2 security group
+  ChallengeEC2SecurityGroup:
+    Description: Challenge EC2 Security Group
+    Export:
+      Name: !Sub ${AWS::StackName}-ChallengeEC2SecurityGroup
+    Value: !Ref ChallengeEC2SecurityGroup
+
+#Export challenge EC2 Instance
+  ChallengeEC2:
+    Description: Challenge EC2 Instance
+    Export:
+      Name: !Sub ${AWS::StackName}-ChallengeEC2
+    Value: !Ref ChallengeEC2
+
